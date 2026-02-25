@@ -2,61 +2,61 @@ import streamlit as st
 
 from core_engine import RAGEngine
 
-
-
-st.set_page_config(page_title="YouTube RAG", layout="wide")
-
-st.title("🎥 YouTube RAG Q&A")
+import pandas as pd
 
 
 
-# Initialize engine only once
-
-if "engine" not in st.session_state:
-
-    st.session_state.engine = RAGEngine()
-
-    st.session_state.index_built = False
+st.set_page_config(page_title="Enterprise RAG", layout="wide")
 
 
 
-video_input = st.text_input("Enter YouTube Video ID")
+st.title("🏢 Enterprise Document Intelligence")
 
 
 
-if st.button("Build Index"):
-
-    if video_input:
-
-        with st.spinner("Building index..."):
-
-            st.session_state.engine.build_from_video(video_input)
+engine = RAGEngine()
 
 
 
-        st.session_state.index_built = True
-
-        st.success("Index built successfully!")
+uploaded_file = st.file_uploader("Upload document", type=["txt", "csv"])
 
 
 
-question = st.text_input("Ask a question")
+if uploaded_file:
 
 
 
-if st.button("Ask"):
+    if uploaded_file.type == "text/plain":
 
-    if not st.session_state.index_built:
+        text = uploaded_file.read().decode("utf-8")
 
-        st.error("Please build the index first.")
+
 
     else:
 
-        with st.spinner("Thinking..."):
+        df = pd.read_csv(uploaded_file)
 
-            answer = st.session_state.engine.ask(question)
+        text = "\n".join(df.astype(str).apply(" ".join, axis=1))
 
-        st.markdown("### Answer")
 
-        st.write(answer)
+
+    if st.button("Build Knowledge Base"):
+
+        engine.build_from_text(text)
+
+        st.success("Knowledge Base Ready")
+
+
+
+question = st.text_input("Ask a business question")
+
+
+
+if st.button("Analyze"):
+
+    answer = engine.ask(question)
+
+    st.markdown("### Insight")
+
+    st.write(answer)
 
