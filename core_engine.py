@@ -10,6 +10,9 @@ import faiss
 
 import nltk
 
+nltk.download("punkt")
+nltk.download("punkt_tab")
+
 import tiktoken
 
 from openai import OpenAI
@@ -183,5 +186,6 @@ class RAGEngine:
 
 
         return response.choices[0].message.content
+
 
 
