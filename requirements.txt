@@ -1,0 +1,8 @@
+streamlit
+faiss-cpu
+tiktoken
+openai
+youtube-transcript-api
+pandas
+numpy
+nltk
