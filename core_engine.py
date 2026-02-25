@@ -1,3 +1,5 @@
+
+#version2
 import os
 
 import pandas as pd
@@ -181,4 +183,5 @@ class RAGEngine:
 
 
         return response.choices[0].message.content
+
 
