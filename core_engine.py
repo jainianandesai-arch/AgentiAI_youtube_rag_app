@@ -1,101 +1,64 @@
-
-#version2
 import os
-
-import pandas as pd
 
 import numpy as np
 
-import faiss
-
-import nltk
-
-nltk.download("punkt")
-nltk.download("punkt_tab")
-
-import tiktoken
+import pandas as pd
 
 from openai import OpenAI
 
+from sklearn.metrics.pairwise import cosine_similarity
 
 
-nltk.download("punkt", quiet=True)
-
-
-
-EMBED_MODEL = "text-embedding-3-small"
-
-CHAT_MODEL = "gpt-4o-mini"
 
 
 
 class RAGEngine:
 
-
-
     def __init__(self):
 
-        self.client = OpenAI()
+        self.client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
-        self.index = None
+        self.embeddings = None
 
-        self.chunk_df = None
-
-        self.encoder = tiktoken.get_encoding("cl100k_base")
+        self.text_chunks = None
 
 
 
-    def token_count(self, text):
+    # -----------------------------
 
-        return len(self.encoder.encode(text))
+    # Build index from raw text
 
+    # -----------------------------
 
-
-    def build_from_text(self, text, max_tokens_per_chunk=700):
-
-
-
-        sentences = nltk.sent_tokenize(text)
+    def build_from_text(self, text, chunk_size=500):
 
 
 
-        chunks = []
+        # Simple chunking (NO NLTK – avoids deployment errors)
 
-        current_chunk = ""
+        chunks = [
 
+            text[i : i + chunk_size]
 
+            for i in range(0, len(text), chunk_size)
 
-        for sentence in sentences:
-
-            if self.token_count(current_chunk + sentence) < max_tokens_per_chunk:
-
-                current_chunk += " " + sentence
-
-            else:
-
-                chunks.append(current_chunk.strip())
-
-                current_chunk = sentence
+        ]
 
 
 
-        if current_chunk:
-
-            chunks.append(current_chunk.strip())
-
-
-
-        self.chunk_df = pd.DataFrame({"text": chunks})
+        self.text_chunks = chunks
 
 
 
         embeddings = []
 
+
+
         for chunk in chunks:
 
             response = self.client.embeddings.create(
 
-                model=EMBED_MODEL,
+                model="text-embedding-3-small",
 
                 input=chunk
 
@@ -105,87 +68,71 @@ class RAGEngine:
 
 
 
-        embedding_array = np.array(embeddings).astype("float32")
+        self.embeddings = np.array(embeddings)
 
 
 
-        dimension = embedding_array.shape[1]
+    # -----------------------------
 
-        self.index = faiss.IndexFlatL2(dimension)
+    # Ask question
 
-        self.index.add(embedding_array)
+    # -----------------------------
 
-
-
-    def ask(self, question, k=3):
+    def ask(self, question):
 
 
 
-        if self.index is None:
+        if self.embeddings is None:
 
             raise ValueError("Index not built yet.")
 
 
 
-        query_embedding = self.client.embeddings.create(
+        # Embed question
 
-            model=EMBED_MODEL,
+        response = self.client.embeddings.create(
+
+            model="text-embedding-3-small",
 
             input=question
 
-        ).data[0].embedding
+        )
 
 
 
-        query_vector = np.array([query_embedding]).astype("float32")
+        question_embedding = np.array(response.data[0].embedding).reshape(1, -1)
 
 
 
-        distances, indices = self.index.search(query_vector, k)
+        # Similarity search
+
+        similarities = cosine_similarity(question_embedding, self.embeddings)
+
+        best_index = np.argmax(similarities)
 
 
 
-        context = "\n\n".join(
+        context = self.text_chunks[best_index]
 
-            self.chunk_df.iloc[i]["text"] for i in indices[0]
+
+
+        # Generate answer
+
+        completion = self.client.chat.completions.create(
+
+            model="gpt-4o-mini",
+
+            messages=[
+
+                {"role": "system", "content": "Answer based only on provided context."},
+
+                {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {question}"}
+
+            ]
 
         )
 
 
 
-        prompt = f"""
-
-        Use the context below to answer the question.
-
-
-
-        Context:
-
-        {context}
-
-
-
-        Question:
-
-        {question}
-
-        """
-
-
-
-        response = self.client.chat.completions.create(
-
-            model=CHAT_MODEL,
-
-            messages=[{"role": "user", "content": prompt}],
-
-            temperature=0
-
-        )
-
-
-
-        return response.choices[0].message.content
-
-
+        return completion.choices[0].message.content
 
